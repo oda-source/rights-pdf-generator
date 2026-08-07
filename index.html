@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <title>権利確認書 自動作成フォーム</title>
-  <!-- PDF生成用の無料ライブラリを読み込み -->
+  <!-- pdfmake と 日本語フォント、PSD解析ライブラリ(psd.js)の読み込み -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfmake-font-generator@1.0.0/vfs_fonts.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/psd/dist/psd.min.js"></script>
   <style>
     body { font-family: sans-serif; background: #f4f6f9; display: flex; justify-content: center; padding: 40px; }
     .card { background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 500px; }
@@ -29,7 +30,7 @@
   <label>画像ファイルをドロップ</label>
   <div class="drop-zone" id="dropZone">
     ここに画像をまとめてドラッグ＆ドロップ<br>
-    <small style="color: #666;">（JPG, PNG 等に対応）</small>
+    <small style="color: #666;">（JPG, PNG, PSD 等に対応）</small>
   </div>
 
   <div id="fileCount" style="margin-top: 10px; font-size: 13px; color: #666; text-align: center;"></div>
@@ -38,6 +39,18 @@
 </div>
 
 <script>
+  // 日本語フォント定義の設定
+  pdfMake.fonts = {
+    Roboto: {
+      normal: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Regular.ttf',
+      bold: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Medium.ttf',
+    },
+    NotoSansJP: {
+      normal: 'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@master/hinted/ttf/NotoSansCJKjp/NotoSansCJKjp-Regular.ttf',
+      bold: 'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@master/hinted/ttf/NotoSansCJKjp/NotoSansCJKjp-Bold.ttf'
+    }
+  };
+
   let uploadedFiles = [];
 
   const dropZone = document.getElementById('dropZone');
@@ -45,7 +58,6 @@
   const generateBtn = document.getElementById('generateBtn');
   const fileCount = document.getElementById('fileCount');
 
-  // ドロップエリアの動作
   dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('hover'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
   dropZone.addEventListener('drop', (e) => {
@@ -56,7 +68,6 @@
     generateBtn.disabled = uploadedFiles.length === 0;
   });
 
-  // 写真入手先判定ロジック
   function getSource(name) {
     if (name.match(/^([xX]?SP|BUD_SP|BUD_)/i)) return "交通社モール";
     if (name.match(/^([xX]?hti|[xX]?LH|阪急交通社)/i)) return "阪急交通社";
@@ -74,20 +85,35 @@
     return "要確認";
   }
 
-  // 内容抽出ロジック
   function getCleanContent(name) {
     let noExt = name.replace(/\.[a-zA-Z0-9]+$/, "");
     return noExt.replace(/^([xX]?([A-Z0-9]+[-_][0-9]+[-_]|[a-z]+_[0-9]+(_[A-Z])?[-_])|BUD_|阪急交通社_|[a-z]+_)/i, "");
   }
 
-  // 安全に画像をDataURL化する処理
+  // 画像・PSDファイルのDataURL化処理
   function fileToDataURL(file) {
-    return new Promise((resolve) => {
-      // ブラウザで読み込めない拡張子（.eps, .aiなど）は判定してダミー文字列を返す
+    return new Promise(async (resolve) => {
+      // 1. EPS / AI ファイルの場合（ブラウザ直接変換不可）
       if (file.name.match(/\.(eps|ai)$/i)) {
         resolve(null);
         return;
       }
+
+      // 2. PSD ファイルの場合（psd.js を使ってブラウザ内でPNG変換）
+      if (file.name.match(/\.psd$/i)) {
+        try {
+          const url = URL.createObjectURL(file);
+          const psd = await PSD.fromURL(url);
+          const pngImage = psd.image.toPng(); // PNG画像オブジェクトを取得
+          resolve(pngImage.src); // PNGのDataURLを返す
+        } catch (e) {
+          console.error('PSD変換エラー:', e);
+          resolve(null);
+        }
+        return;
+      }
+
+      // 3. 通常の画像（JPG, PNG, WEBP等）の場合
       const reader = new FileReader();
       reader.onload = (e) => resolve(e.target.result);
       reader.onerror = () => resolve(null);
@@ -95,11 +121,10 @@
     });
   }
 
-  // PDF生成処理
   generateBtn.addEventListener('click', async () => {
     try {
       generateBtn.disabled = true;
-      generateBtn.textContent = 'PDFを作成中...';
+      generateBtn.textContent = 'PDFを作成中（画像解析中）...';
 
       const titleText = docTitleInput.value.trim() || "無題";
       const fullTitle = "【権利確認書】" + titleText;
@@ -116,13 +141,11 @@
 
         const dataUrl = await fileToDataURL(file);
 
-        // 画像枠の設定（読み込めないファイルの場合はテキストで代替表示）
-        let imgContent = { text: '（プレビュー不可）', fontSize: 10, alignment: 'center', margin: [0, 40, 0, 0] };
+        let imgContent = { text: '（プレビュー非表示）', fontSize: 9, alignment: 'center', margin: [0, 40, 0, 0], color: '#888' };
         if (dataUrl) {
           imgContent = { image: dataUrl, width: 160, height: 110 };
         }
 
-        // 1ブロック（左画像・右テキストの2列レイアウト）
         let block = {
           columns: [
             imgContent,
@@ -144,7 +167,6 @@
 
         docContent.push(block);
 
-        // 仕切り線（最後のブロック以外）
         if (i < uploadedFiles.length - 1) {
           docContent.push({
             canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#ccc' }],
@@ -156,10 +178,12 @@
       const docDefinition = {
         content: docContent,
         pageSize: 'A4',
-        pageMargins: [40, 40, 40, 40]
+        pageMargins: [40, 40, 40, 40],
+        defaultStyle: {
+          font: 'NotoSansJP'
+        }
       };
 
-      // PDFのダウンロード実行
       pdfMake.createPdf(docDefinition).download(fullTitle + '.pdf');
 
     } catch (err) {
