@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <title>権利確認書 自動作成フォーム</title>
-  <!-- pdfmake の標準ライブラリ（外部フォント読み込みなし） -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
   <style>
@@ -21,7 +20,6 @@
     .drop-zone { border: 2px dashed #4f46e5; border-radius: 8px; padding: 30px 10px; text-align: center; background: #eeeffd; color: #4f46e5; cursor: pointer; font-size: 13px; }
     .drop-zone.hover { background: #e0e2fe; }
 
-    /* コンパクトな右側リスト */
     .file-list-container {
       flex: 1;
       border: 1px solid #cbd5e1;
@@ -203,7 +201,6 @@
     return noExt.replace(/^([xX]?([A-Z0-9]+[-_][0-9]+[-_]|[a-z]+_[0-9]+(_[A-Z])?[-_])|BUD_|阪急交通社_|[a-z]+_)/i, "");
   }
 
-  // 安全な画像データ変換（.eps, .ai, .pdf などの非画像データは無視）
   function fileToDataURL(file) {
     return new Promise((resolve) => {
       if (file.name.match(/\.(eps|ai|pdf|psd)$/i) || !file.type.startsWith('image/')) {
@@ -217,21 +214,22 @@
     });
   }
 
-  // 日本語テキストの文字化けを100%防止する画像化エンジン
-  function drawTextToImage(text, fontSize = 12, isBold = false) {
+  // 文字化け防止 ＆ 細字フォント化（Regular指定）
+  function drawTextToImage(text, fontSize = 11, isBold = false) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    const scale = 2; // 高解像度レンダリング
+    const scale = 2;
     
-    const font = `${isBold ? 'bold ' : ''}${fontSize * scale}px "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif`;
+    // isBold を false（細字）にして通常ウェイトで統一
+    const font = `${isBold ? '600 ' : 'normal '}${fontSize * scale}px "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif`;
     ctx.font = font;
 
     const metrics = ctx.measureText(text);
     canvas.width = Math.ceil(metrics.width) + 10;
-    canvas.height = Math.ceil(fontSize * 1.5 * scale);
+    canvas.height = Math.ceil(fontSize * 1.4 * scale);
 
     ctx.font = font;
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = '#1e293b';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, 0, canvas.height / 2);
 
@@ -250,18 +248,16 @@
       const titleText = docTitleInput.value.trim() || "無題";
       const fullTitle = "【権利確認書】" + titleText;
 
-      // タイトル部分を生成
-      const titleImg = drawTextToImage(fullTitle, 16, true);
+      const titleImg = drawTextToImage(fullTitle, 15, true);
       let docContent = [
-        { image: titleImg.image, width: titleImg.width, height: titleImg.height, margin: [0, 0, 0, 15] }
+        { image: titleImg.image, width: titleImg.width, height: titleImg.height, margin: [0, 0, 0, 10] }
       ];
 
-      // 有効な画像ファイル（JPG/PNG等）のみ抽出
       let validItems = [];
       for (let i = 0; i < fileDataList.length; i++) {
         const item = fileDataList[i];
         if (item.file.name.match(/\.(eps|ai|pdf|psd)$/i)) {
-          continue; // 非対応フォーマットはスキップ
+          continue;
         }
         const dataUrl = await fileToDataURL(item.file);
         if (dataUrl) {
@@ -283,39 +279,45 @@
         const contentText = getCleanContent(fileName);
         const sourceText = getSource(fileName);
 
-        // 各ラベルとテキストを確実に画像描画化（文字化けを100%遮断）
-        const labelName = drawTextToImage('【画像名】', 10, true);
-        const valName = drawTextToImage(fileName, 9);
-        const labelContent = drawTextToImage('【内容】', 10, true);
-        const valContent = drawTextToImage(contentText, 9);
-        const labelSource = drawTextToImage('【写真入手先】', 10, true);
-        const valSource = drawTextToImage(sourceText, 9);
+        // 細字化したテキスト画像を生成
+        const labelName = drawTextToImage('【画像名】', 9.5, true);
+        const valName = drawTextToImage(fileName, 8.5);
+        const labelContent = drawTextToImage('【内容】', 9.5, true);
+        const valContent = drawTextToImage(contentText, 8.5);
+        const labelSource = drawTextToImage('【写真入手先】', 9.5, true);
+        const valSource = drawTextToImage(sourceText, 8.5);
 
         let block = {
           columns: [
-            { image: item.dataUrl, width: 160, height: 110 },
+            { image: item.dataUrl, width: 140, height: 95 },
             {
               width: '*',
-              margin: [15, 0, 0, 0],
+              margin: [12, 0, 0, 0],
               stack: [
-                { image: labelName.image, width: labelName.width, height: labelName.height, margin: [0, 0, 0, 2] },
-                { image: valName.image, width: valName.width, height: valName.height, margin: [0, 0, 0, 8] },
-                { image: labelContent.image, width: labelContent.width, height: labelContent.height, margin: [0, 0, 0, 2] },
-                { image: valContent.image, width: valContent.width, height: valContent.height, margin: [0, 0, 0, 8] },
-                { image: labelSource.image, width: labelSource.width, height: labelSource.height, margin: [0, 0, 0, 2] },
+                { image: labelName.image, width: labelName.width, height: labelName.height, margin: [0, 0, 0, 1] },
+                { image: valName.image, width: valName.width, height: valName.height, margin: [0, 0, 0, 5] },
+                { image: labelContent.image, width: labelContent.width, height: labelContent.height, margin: [0, 0, 0, 1] },
+                { image: valContent.image, width: valContent.width, height: valContent.height, margin: [0, 0, 0, 5] },
+                { image: labelSource.image, width: labelSource.width, height: labelSource.height, margin: [0, 0, 0, 1] },
                 { image: valSource.image, width: valSource.width, height: valSource.height }
               ]
             }
           ],
-          margin: [0, 0, 0, 10]
+          margin: [0, 0, 0, 6]
         };
+
+        // 1ページあたり5枚（5項目）ごとに改ページを入れる制御
+        if (i > 0 && i % 5 === 0) {
+          block.pageBreak = 'before';
+        }
 
         docContent.push(block);
 
-        if (i < validItems.length - 1) {
+        // ブロック間の区切り線（ページの最後のアイテム以外）
+        if (i < validItems.length - 1 && (i + 1) % 5 !== 0) {
           docContent.push({
-            canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#ccc' }],
-            margin: [0, 5, 0, 15]
+            canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#e2e8f0' }],
+            margin: [0, 3, 0, 8]
           });
         }
       }
@@ -323,10 +325,9 @@
       const docDefinition = {
         content: docContent,
         pageSize: 'A4',
-        pageMargins: [40, 40, 40, 40]
+        pageMargins: [35, 30, 35, 30]
       };
 
-      // 即座にダウンロード実行
       pdfMake.createPdf(docDefinition).download(fullTitle + '.pdf');
 
     } catch (err) {
