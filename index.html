@@ -1,1 +1,152 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>権利確認書 自動作成フォーム</title>
+  <!-- PDF生成用の無料ライブラリを読み込み -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+  <style>
+    body { font-family: sans-serif; background: #f4f6f9; display: flex; justify-content: center; padding: 40px; }
+    .card { background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 500px; }
+    h2 { text-align: center; color: #1a1a2e; margin-bottom: 20px; }
+    label { font-weight: bold; font-size: 14px; display: block; margin-bottom: 8px; color: #333; }
+    input[type="text"] { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 15px; margin-bottom: 20px; }
+    .drop-zone { border: 2px dashed #4f46e5; border-radius: 8px; padding: 30px; text-align: center; background: #eeeffd; color: #4f46e5; cursor: pointer; }
+    .drop-zone.hover { background: #e0e2fe; }
+    button { width: 100%; margin-top: 20px; padding: 14px; background: #4f46e5; color: #fff; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+  </style>
+</head>
+<body>
 
+<div class="card">
+  <h2>権利確認書 作成フォーム</h2>
+  
+  <label for="docTitle">【権利確認書】のあとに続ける名前（コピペ可）</label>
+  <input type="text" id="docTitle" placeholder="例: 8K073_流氷×雪まつり">
+
+  <label>画像ファイルをドロップ</label>
+  <div class="drop-zone" id="dropZone">
+    ここに画像をまとめてドラッグ＆ドロップ<br>
+    <small style="color: #666;">（JPG, PNG 等に対応）</small>
+  </div>
+
+  <div id="fileCount" style="margin-top: 10px; font-size: 13px; color: #666; text-align: center;"></div>
+
+  <button id="generateBtn" disabled>PDFを作成してダウンロード</button>
+</div>
+
+<script>
+  let uploadedFiles = [];
+
+  const dropZone = document.getElementById('dropZone');
+  const docTitleInput = document.getElementById('docTitle');
+  const generateBtn = document.getElementById('generateBtn');
+  const fileCount = document.getElementById('fileCount');
+
+  // ドロップエリアの動作
+  dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('hover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('hover');
+    uploadedFiles = Array.from(e.dataTransfer.files);
+    fileCount.textContent = `${uploadedFiles.length} 個のファイルが選択されました`;
+    generateBtn.disabled = uploadedFiles.length === 0;
+  });
+
+  // 写真入手先判定ロジック
+  function getSource(name) {
+    if (name.match(/^([xX]?SP|BUD_SP|BUD_)/i)) return "交通社モール";
+    if (name.match(/^([xX]?hti|[xX]?LH|阪急交通社)/i)) return "阪急交通社";
+    if (name.match(/^([xX]?px|[xX]?pixta)/i)) return "pixta";
+    if (name.match(/^([xX]?pl|[xX]?photolibrary)/i)) return "photolibrary";
+    if (name.match(/^([xX]?as|[xX]?AdobeStock)/i)) return "AdobeStock";
+    
+    if (name.indexOf("_") !== -1) {
+      let parts = name.split("_");
+      if (parts[0] !== "") {
+        let raw = parts[0];
+        return raw.match(/^[xX].+/) ? raw.substring(1) : raw;
+      }
+    }
+    return "要確認";
+  }
+
+  // 内容抽出ロジック
+  function getCleanContent(name) {
+    let noExt = name.replace(/\.[a-zA-Z0-9]+$/, "");
+    return noExt.replace(/^([xX]?([A-Z0-9]+[-_][0-9]+[-_]|[a-z]+_[0-9]+(_[A-Z])?[-_])|BUD_|阪急交通社_|[a-z]+_)/i, "");
+  }
+
+  // 画像をDataURLに変換するヘルパー
+  function fileToDataURL(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // PDF生成処理
+  generateBtn.addEventListener('click', async () => {
+    const titleText = docTitleInput.value.trim() || "無題";
+    const fullTitle = "【権利確認書】" + titleText;
+
+    let docContent = [
+      { text: fullTitle, fontSize: 16, bold: true, margin: [0, 0, 0, 15] }
+    ];
+
+    for (let i = 0; i < uploadedFiles.length; i++) {
+      const file = uploadedFiles[i];
+      const dataUrl = await fileToDataURL(file);
+      const fileName = file.name;
+      const contentText = getCleanContent(fileName);
+      const sourceText = getSource(fileName);
+
+      // 1ブロック（左画像・右テキストの2列レイアウト）
+      let block = {
+        columns: [
+          { image: dataUrl, width: 160, height: 110 },
+          {
+            width: '*',
+            margin: [15, 0, 0, 0],
+            text: [
+              { text: '【画像名】\n', bold: true, fontSize: 10 },
+              { text: fileName + '\n\n', fontSize: 9 },
+              { text: '【内容】\n', bold: true, fontSize: 10 },
+              { text: contentText + '\n\n', fontSize: 9 },
+              { text: '【写真入手先】\n', bold: true, fontSize: 10 },
+              { text: sourceText, fontSize: 9 }
+            ]
+          }
+        ],
+        margin: [0, 0, 0, 10]
+      };
+
+      docContent.push(block);
+
+      // 仕切り線（最後のブロック以外）
+      if (i < uploadedFiles.length - 1) {
+        docContent.push({
+          canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#ccc' }],
+          margin: [0, 5, 0, 15]
+        });
+      }
+    }
+
+    // PDF定義
+    const docDefinition = {
+      content: docContent,
+      pageSize: 'A4',
+      pageMargins: [40, 40, 40, 40]
+    };
+
+    // ダウンロード実行
+    pdfMake.createPdf(docDefinition).download(fullTitle + '.pdf');
+  });
+</script>
+
+</body>
+</html>
