@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
+<body>
+  <script>
+    window.TrelloPowerUp.initialize({
+      'board-buttons': function (t, opts) {
+        return [{
+          icon: 'https://api.iconify.design/ion:document-text-outline.svg?color=%234f46e5',
+          text: '権利確認書PDF作成',
+          callback: function (t) {
+            return t.modal({
+              title: '権利確認書 作成フォーム',
+              url: './index.html',
+              height: 680
+            });
+          }
+        }];
+      }
+    });
+  </script>
+</body>
+</html>
