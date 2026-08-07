@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>権利確認書 自動作成フォーム</title>
-  <!-- pdfmake の読み込み -->
+  <!-- pdfmake と 日本語フォント(Noto Sans JP) の読み込み -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
   <style>
@@ -21,7 +21,6 @@
     .drop-zone { border: 2px dashed #4f46e5; border-radius: 8px; padding: 30px 10px; text-align: center; background: #eeeffd; color: #4f46e5; cursor: pointer; font-size: 13px; }
     .drop-zone.hover { background: #e0e2fe; }
 
-    /* コンパクトな右側リスト */
     .file-list-container {
       flex: 1;
       border: 1px solid #cbd5e1;
@@ -114,6 +113,18 @@
 </div>
 
 <script>
+  // pdfmake 用の日本語フォント設定（Noto Sans JP）
+  pdfMake.fonts = {
+    Roboto: {
+      normal: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Regular.ttf',
+      bold: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Medium.ttf',
+    },
+    NotoSansJP: {
+      normal: 'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@master/hinted/ttf/NotoSansCJKjp/NotoSansCJKjp-Regular.ttf',
+      bold: 'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@master/hinted/ttf/NotoSansCJKjp/NotoSansCJKjp-Bold.ttf'
+    }
+  };
+
   let fileDataList = [];
 
   const dropZone = document.getElementById('dropZone');
@@ -203,17 +214,16 @@
     return noExt.replace(/^([xX]?([A-Z0-9]+[-_][0-9]+[-_]|[a-z]+_[0-9]+(_[A-Z])?[-_])|BUD_|阪急交通社_|[a-z]+_)/i, "");
   }
 
-  // 画像読み込み処理（.epsや.pdfなどの非画像ファイルはエラーを出さず安全にスキップ）
+  // 安全な画像データ変換（.eps, .ai, .pdf などの非画像データは一切読み込まず null を返す）
   function fileToDataURL(file) {
     return new Promise((resolve) => {
-      // 非画像形式（eps, ai, pdf, psdなど）は処理を通さず即座にnullを返す
       if (file.name.match(/\.(eps|ai|pdf|psd)$/i) || !file.type.startsWith('image/')) {
         resolve(null);
         return;
       }
       const reader = new FileReader();
       reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = () => resolve(null); // エラーが起きてもプログラムを止めない
+      reader.onerror = () => resolve(null);
       reader.readAsDataURL(file);
     });
   }
@@ -221,7 +231,7 @@
   generateBtn.addEventListener('click', async () => {
     try {
       generateBtn.disabled = true;
-      generateBtn.textContent = 'PDF生成中...';
+      generateBtn.textContent = 'PDF作成中...';
 
       const titleText = docTitleInput.value.trim() || "無題";
       const fullTitle = "【権利確認書】" + titleText;
@@ -230,22 +240,36 @@
         { text: fullTitle, fontSize: 16, bold: true, margin: [0, 0, 0, 15] }
       ];
 
+      // 有効な画像データを持つアイテムだけを抽出
+      let validItems = [];
       for (let i = 0; i < fileDataList.length; i++) {
         const item = fileDataList[i];
+        if (item.file.name.match(/\.(eps|ai|pdf|psd)$/i)) {
+          continue; // .eps や .pdf はPDF出力から完全に無視（スキップ）
+        }
+        const dataUrl = await fileToDataURL(item.file);
+        if (dataUrl) {
+          validItems.push({
+            name: item.name,
+            dataUrl: dataUrl
+          });
+        }
+      }
+
+      if (validItems.length === 0) {
+        alert("有効な画像ファイル（JPG, PNG, WEBP）が見つかりませんでした。");
+        return;
+      }
+
+      for (let i = 0; i < validItems.length; i++) {
+        const item = validItems[i];
         const fileName = item.name;
         const contentText = getCleanContent(fileName);
         const sourceText = getSource(fileName);
 
-        const dataUrl = await fileToDataURL(item.file);
-
-        let imgContent = { text: '（プレビュー非表示）', fontSize: 9, alignment: 'center', margin: [0, 40, 0, 0], color: '#888' };
-        if (dataUrl) {
-          imgContent = { image: dataUrl, width: 160, height: 110 };
-        }
-
         let block = {
           columns: [
-            imgContent,
+            { image: item.dataUrl, width: 160, height: 110 },
             {
               width: '*',
               margin: [15, 0, 0, 0],
@@ -264,7 +288,7 @@
 
         docContent.push(block);
 
-        if (i < fileDataList.length - 1) {
+        if (i < validItems.length - 1) {
           docContent.push({
             canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#ccc' }],
             margin: [0, 5, 0, 15]
@@ -275,7 +299,10 @@
       const docDefinition = {
         content: docContent,
         pageSize: 'A4',
-        pageMargins: [40, 40, 40, 40]
+        pageMargins: [40, 40, 40, 40],
+        defaultStyle: {
+          font: 'NotoSansJP'
+        }
       };
 
       // 直接ダウンロードを実行
