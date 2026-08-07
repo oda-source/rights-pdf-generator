@@ -3,18 +3,51 @@
 <head>
   <meta charset="UTF-8">
   <title>権利確認書 自動作成フォーム</title>
-  <!-- pdfmake と 日本語フォント、PSD解析ライブラリ(psd.js)の読み込み -->
+  <!-- pdfmake と psd.js の読み込み -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/pdfmake-font-generator@1.0.0/vfs_fonts.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/psd/dist/psd.min.js"></script>
   <style>
     body { font-family: sans-serif; background: #f4f6f9; display: flex; justify-content: center; padding: 40px; }
-    .card { background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 500px; }
+    .card { background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 520px; }
     h2 { text-align: center; color: #1a1a2e; margin-bottom: 20px; }
     label { font-weight: bold; font-size: 14px; display: block; margin-bottom: 8px; color: #333; }
     input[type="text"] { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 15px; margin-bottom: 20px; }
-    .drop-zone { border: 2px dashed #4f46e5; border-radius: 8px; padding: 30px; text-align: center; background: #eeeffd; color: #4f46e5; cursor: pointer; }
+    .drop-zone { border: 2px dashed #4f46e5; border-radius: 8px; padding: 25px; text-align: center; background: #eeeffd; color: #4f46e5; cursor: pointer; }
     .drop-zone.hover { background: #e0e2fe; }
+    
+    /* 追加：アップロードファイル一覧（小さめの文字）のスタイル */
+    .file-list-container {
+      margin-top: 15px;
+      max-height: 140px;
+      overflow-y: auto;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px;
+      background: #fafafa;
+    }
+    .file-list-title {
+      font-size: 12px;
+      font-weight: bold;
+      color: #475569;
+      margin-bottom: 6px;
+    }
+    .file-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .file-list li {
+      font-size: 11px;
+      color: #64748b;
+      padding: 3px 0;
+      border-bottom: 1px dashed #e2e8f0;
+      word-break: break-all;
+    }
+    .file-list li:last-child {
+      border-bottom: none;
+    }
+
     button { width: 100%; margin-top: 20px; padding: 14px; background: #4f46e5; color: #fff; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
     button:disabled { background: #ccc; cursor: not-allowed; }
   </style>
@@ -33,30 +66,24 @@
     <small style="color: #666;">（JPG, PNG, PSD 等に対応）</small>
   </div>
 
-  <div id="fileCount" style="margin-top: 10px; font-size: 13px; color: #666; text-align: center;"></div>
+  <!-- 【新機能】アップロードしたファイル名の小さめリスト表示エリア -->
+  <div class="file-list-container" id="fileListContainer" style="display: none;">
+    <div class="file-list-title" id="fileListTitle">選択されたファイル</div>
+    <ul class="file-list" id="fileList"></ul>
+  </div>
 
   <button id="generateBtn" disabled>PDFを作成してダウンロード</button>
 </div>
 
 <script>
-  // 日本語フォント定義の設定
-  pdfMake.fonts = {
-    Roboto: {
-      normal: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Regular.ttf',
-      bold: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Medium.ttf',
-    },
-    NotoSansJP: {
-      normal: 'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@master/hinted/ttf/NotoSansCJKjp/NotoSansCJKjp-Regular.ttf',
-      bold: 'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@master/hinted/ttf/NotoSansCJKjp/NotoSansCJKjp-Bold.ttf'
-    }
-  };
-
   let uploadedFiles = [];
 
   const dropZone = document.getElementById('dropZone');
   const docTitleInput = document.getElementById('docTitle');
   const generateBtn = document.getElementById('generateBtn');
-  const fileCount = document.getElementById('fileCount');
+  const fileListContainer = document.getElementById('fileListContainer');
+  const fileListTitle = document.getElementById('fileListTitle');
+  const fileList = document.getElementById('fileList');
 
   dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('hover'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
@@ -64,9 +91,28 @@
     e.preventDefault();
     dropZone.classList.remove('hover');
     uploadedFiles = Array.from(e.dataTransfer.files);
-    fileCount.textContent = `${uploadedFiles.length} 個のファイルが選択されました`;
+    
+    // リストの描画
+    renderFileList();
     generateBtn.disabled = uploadedFiles.length === 0;
   });
+
+  // ファイルリスト描画処理（小さめ文字で出力）
+  function renderFileList() {
+    fileList.innerHTML = '';
+    if (uploadedFiles.length === 0) {
+      fileListContainer.style.display = 'none';
+      return;
+    }
+    
+    fileListTitle.textContent = `選択されたファイル（全 ${uploadedFiles.length} 件）:`;
+    uploadedFiles.forEach((file, index) => {
+      const li = document.createElement('li');
+      li.textContent = `${index + 1}. ${file.name}`;
+      fileList.appendChild(li);
+    });
+    fileListContainer.style.display = 'block';
+  }
 
   function getSource(name) {
     if (name.match(/^([xX]?SP|BUD_SP|BUD_)/i)) return "交通社モール";
@@ -90,30 +136,26 @@
     return noExt.replace(/^([xX]?([A-Z0-9]+[-_][0-9]+[-_]|[a-z]+_[0-9]+(_[A-Z])?[-_])|BUD_|阪急交通社_|[a-z]+_)/i, "");
   }
 
-  // 画像・PSDファイルのDataURL化処理
   function fileToDataURL(file) {
     return new Promise(async (resolve) => {
-      // 1. EPS / AI ファイルの場合（ブラウザ直接変換不可）
       if (file.name.match(/\.(eps|ai)$/i)) {
         resolve(null);
         return;
       }
 
-      // 2. PSD ファイルの場合（psd.js を使ってブラウザ内でPNG変換）
       if (file.name.match(/\.psd$/i)) {
         try {
           const url = URL.createObjectURL(file);
           const psd = await PSD.fromURL(url);
-          const pngImage = psd.image.toPng(); // PNG画像オブジェクトを取得
-          resolve(pngImage.src); // PNGのDataURLを返す
+          const pngImage = psd.image.toPng();
+          resolve(pngImage.src);
         } catch (e) {
-          console.error('PSD変換エラー:', e);
+          console.error('PSD解析エラー:', e);
           resolve(null);
         }
         return;
       }
 
-      // 3. 通常の画像（JPG, PNG, WEBP等）の場合
       const reader = new FileReader();
       reader.onload = (e) => resolve(e.target.result);
       reader.onerror = () => resolve(null);
@@ -124,7 +166,7 @@
   generateBtn.addEventListener('click', async () => {
     try {
       generateBtn.disabled = true;
-      generateBtn.textContent = 'PDFを作成中（画像解析中）...';
+      generateBtn.textContent = 'PDFを作成中...';
 
       const titleText = docTitleInput.value.trim() || "無題";
       const fullTitle = "【権利確認書】" + titleText;
@@ -178,16 +220,14 @@
       const docDefinition = {
         content: docContent,
         pageSize: 'A4',
-        pageMargins: [40, 40, 40, 40],
-        defaultStyle: {
-          font: 'NotoSansJP'
-        }
+        pageMargins: [40, 40, 40, 40]
       };
 
+      // ダウンロードの実行
       pdfMake.createPdf(docDefinition).download(fullTitle + '.pdf');
 
     } catch (err) {
-      alert('エラーが発生しました: ' + err.message);
+      alert('PDF作成中にエラーが発生しました: ' + err.message);
     } finally {
       generateBtn.disabled = false;
       generateBtn.textContent = 'PDFを作成してダウンロード';
