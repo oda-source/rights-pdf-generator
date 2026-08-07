@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>権利確認書 自動作成フォーム</title>
+  <!-- pdfmake ライブラリ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
   <style>
@@ -17,7 +18,7 @@
     label { font-weight: bold; font-size: 13px; display: block; margin-bottom: 6px; color: #333; }
     input[type="text"].title-input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 14px; margin-bottom: 15px; }
     
-    /* 修正点：ドロップ枠の高さとパディングを大幅に拡張 */
+    /* ドロップ枠の高さとパディングを広めに確保 */
     .drop-zone {
       border: 2px dashed #4f46e5;
       border-radius: 8px;
@@ -36,6 +37,7 @@
     }
     .drop-zone.hover { background: #e0e2fe; border-color: #3730a3; }
 
+    /* 右側ファイルリストエリア */
     .file-list-container {
       flex: 1;
       border: 1px solid #cbd5e1;
@@ -151,6 +153,7 @@
   const fileListTitle = document.getElementById('fileListTitle');
   const fileList = document.getElementById('fileList');
 
+  // 非対応ファイルの判定 (.eps, .ai, .pdf, .psd 等)
   function isUnsupportedFile(filename) {
     return !!filename.match(/\.(eps|ai|pdf|psd)$/i);
   }
@@ -265,6 +268,7 @@
     });
   }
 
+  // 小さめの細字フォント描画（InDesign仕様）
   function drawTextToImage(text, fontSize = 8, isBold = false) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -391,6 +395,28 @@
       generateBtn.textContent = 'PDFを作成してダウンロード';
     }
   });
+</script>
+
+<!-- Trello Power-Up ライブラリ ＆ ボード右上ボタン制御 -->
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+<script>
+  if (window.TrelloPowerUp) {
+    window.TrelloPowerUp.initialize({
+      'board-buttons': function (t, opts) {
+        return [{
+          icon: 'https://api.iconify.design/ion:document-text-outline.svg?color=%234f46e5',
+          text: '権利確認書PDF作成',
+          callback: function (t) {
+            return t.modal({
+              title: '権利確認書 作成フォーム',
+              url: './index.html',
+              height: 680
+            });
+          }
+        }];
+      }
+    });
+  }
 </script>
 
 </body>
