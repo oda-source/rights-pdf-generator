@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>権利確認書 自動作成フォーム</title>
-  <!-- pdfmake の最新・安定ライブラリを読み込み -->
+  <!-- pdfmake の読み込み -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
   <style>
@@ -203,12 +203,17 @@
     return noExt.replace(/^([xX]?([A-Z0-9]+[-_][0-9]+[-_]|[a-z]+_[0-9]+(_[A-Z])?[-_])|BUD_|阪急交通社_|[a-z]+_)/i, "");
   }
 
-  // 画像の読み込み処理（JPG/PNG等を高画質DataURLへ変換）
+  // 画像読み込み処理（.epsや.pdfなどの非画像ファイルはエラーを出さず安全にスキップ）
   function fileToDataURL(file) {
     return new Promise((resolve) => {
+      // 非画像形式（eps, ai, pdf, psdなど）は処理を通さず即座にnullを返す
+      if (file.name.match(/\.(eps|ai|pdf|psd)$/i) || !file.type.startsWith('image/')) {
+        resolve(null);
+        return;
+      }
       const reader = new FileReader();
       reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = () => resolve(null);
+      reader.onerror = () => resolve(null); // エラーが起きてもプログラムを止めない
       reader.readAsDataURL(file);
     });
   }
@@ -233,7 +238,7 @@
 
         const dataUrl = await fileToDataURL(item.file);
 
-        let imgContent = { text: '（画像なし）', fontSize: 9, alignment: 'center', margin: [0, 40, 0, 0], color: '#888' };
+        let imgContent = { text: '（プレビュー非表示）', fontSize: 9, alignment: 'center', margin: [0, 40, 0, 0], color: '#888' };
         if (dataUrl) {
           imgContent = { image: dataUrl, width: 160, height: 110 };
         }
@@ -273,7 +278,7 @@
         pageMargins: [40, 40, 40, 40]
       };
 
-      // ダイアログを出さずにブラウザでそのままPDFをダウンロード
+      // 直接ダウンロードを実行
       pdfMake.createPdf(docDefinition).download(fullTitle + '.pdf');
 
     } catch (err) {
