@@ -37,6 +37,9 @@
       margin-bottom: 6px;
       padding-bottom: 4px;
       border-bottom: 1px solid #cbd5e1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     .file-list {
       list-style: none;
@@ -48,9 +51,13 @@
     .file-item {
       display: flex;
       align-items: center;
-      padding: 2px 0;
+      padding: 3px 0;
       border-bottom: 1px dashed #e2e8f0;
       gap: 6px;
+    }
+    .file-item.warning-item {
+      background: #fef2f2;
+      border-bottom-color: #fca5a5;
     }
     .file-index { font-size: 10px; color: #64748b; width: 22px; text-align: right; }
     .file-name-input {
@@ -62,6 +69,12 @@
       color: #334155;
       height: 22px;
       box-sizing: border-box;
+    }
+    .warning-badge {
+      font-size: 10px;
+      color: #dc2626;
+      font-weight: bold;
+      white-space: nowrap;
     }
     .btn-delete {
       padding: 2px 6px;
@@ -102,7 +115,9 @@
 
     <div class="right-panel">
       <div class="file-list-container">
-        <div class="file-list-title" id="fileListTitle">選択されたファイル（0件）</div>
+        <div class="file-list-title" id="fileListTitle">
+          <span>選択されたファイル（0件）</span>
+        </div>
         <ul class="file-list" id="fileList">
           <li style="color: #94a3b8; text-align: center; margin-top: 40px; font-size: 11px;">ファイルをドロップすると<br>ここにコンパクトに表示されます</li>
         </ul>
@@ -119,6 +134,11 @@
   const generateBtn = document.getElementById('generateBtn');
   const fileListTitle = document.getElementById('fileListTitle');
   const fileList = document.getElementById('fileList');
+
+  // 非対応ファイルの判定関数 (.eps, .ai, .pdf, .psd 等)
+  function isUnsupportedFile(filename) {
+    return !!filename.match(/\.(eps|ai|pdf|psd)$/i);
+  }
 
   dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('hover'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
@@ -139,16 +159,23 @@
     fileList.innerHTML = '';
     if (fileDataList.length === 0) {
       fileList.innerHTML = '<li style="color: #94a3b8; text-align: center; margin-top: 40px; font-size: 11px;">ファイルをドロップすると<br>ここにコンパクトに表示されます</li>';
-      fileListTitle.textContent = '選択されたファイル（0件）';
+      fileListTitle.innerHTML = '<span>選択されたファイル（0件）</span>';
       generateBtn.disabled = true;
       return;
     }
+
+    let warningCount = fileDataList.filter(item => isUnsupportedFile(item.name)).length;
     
-    fileListTitle.textContent = `選択されたファイル（全 ${fileDataList.length} 件）:`;
+    let titleHtml = `<span>選択されたファイル（全 ${fileDataList.length} 件）:</span>`;
+    if (warningCount > 0) {
+      titleHtml += `<span style="color: #dc2626; font-size: 11px;">⚠️ 非対応形式: ${warningCount}件</span>`;
+    }
+    fileListTitle.innerHTML = titleHtml;
     
     fileDataList.forEach((item, index) => {
+      const isWarn = isUnsupportedFile(item.name);
       const li = document.createElement('li');
-      li.className = 'file-item';
+      li.className = 'file-item' + (isWarn ? ' warning-item' : '');
 
       const idxSpan = document.createElement('span');
       idxSpan.className = 'file-index';
@@ -160,7 +187,18 @@
       input.value = item.name;
       input.addEventListener('input', (e) => {
         fileDataList[index].name = e.target.value;
+        renderFileList(); // 名前変更時も再判定
       });
+
+      li.appendChild(idxSpan);
+      li.appendChild(input);
+
+      if (isWarn) {
+        const warnSpan = document.createElement('span');
+        warnSpan.className = 'warning-badge';
+        warnSpan.textContent = '【対象外】';
+        li.appendChild(warnSpan);
+      }
 
       const delBtn = document.createElement('button');
       delBtn.className = 'btn-delete';
@@ -170,8 +208,6 @@
         renderFileList();
       });
 
-      li.appendChild(idxSpan);
-      li.appendChild(input);
       li.appendChild(delBtn);
       fileList.appendChild(li);
     });
@@ -203,7 +239,7 @@
 
   function fileToDataURL(file) {
     return new Promise((resolve) => {
-      if (file.name.match(/\.(eps|ai|pdf|psd)$/i) || !file.type.startsWith('image/')) {
+      if (isUnsupportedFile(file.name) || !file.type.startsWith('image/')) {
         resolve(null);
         return;
       }
@@ -214,11 +250,10 @@
     });
   }
 
-  // 小さめの細字フォント描画（InDesign仕様）
   function drawTextToImage(text, fontSize = 8, isBold = false) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    const scale = 2; // 高精細描画
+    const scale = 2;
     
     const font = `${isBold ? '500 ' : 'normal '}${fontSize * scale}px "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif`;
     ctx.font = font;
@@ -244,6 +279,18 @@
       generateBtn.disabled = true;
       generateBtn.textContent = 'PDF作成中...';
 
+      // 警告対象ファイルの確認ダイアログ
+      const warnFiles = fileDataList.filter(item => isUnsupportedFile(item.name));
+      if (warnFiles.length > 0) {
+        const warnNames = warnFiles.map(i => "・" + i.name).join("\n");
+        const confirmMsg = `以下の ${warnFiles.length} 件は対象外形式（.eps/.ai/.pdf等）のため、PDF出力から除外されます。\nこのまま処理を続行しますか？\n\n${warnNames}`;
+        if (!confirm(confirmMsg)) {
+          generateBtn.disabled = false;
+          generateBtn.textContent = 'PDFを作成してダウンロード';
+          return;
+        }
+      }
+
       const titleText = docTitleInput.value.trim() || "無題";
       const fullTitle = "【権利確認書】" + titleText;
 
@@ -255,7 +302,7 @@
       let validItems = [];
       for (let i = 0; i < fileDataList.length; i++) {
         const item = fileDataList[i];
-        if (item.file.name.match(/\.(eps|ai|pdf|psd)$/i)) {
+        if (isUnsupportedFile(item.file.name)) {
           continue;
         }
         const dataUrl = await fileToDataURL(item.file);
@@ -278,7 +325,6 @@
         const contentText = getCleanContent(fileName);
         const sourceText = getSource(fileName);
 
-        // 小さめの文字サイズ（InDesignに寄せる）
         const labelName = drawTextToImage('【画像名】', 8, true);
         const valName = drawTextToImage(fileName, 7.5);
         const labelContent = drawTextToImage('【内容】', 8, true);
@@ -286,7 +332,6 @@
         const labelSource = drawTextToImage('【写真入手先】', 8, true);
         const valSource = drawTextToImage(sourceText, 7.5);
 
-        // サムネイルを大きく（横170px = 60mm、縦113px = 40mm）＆ 項目単位での分解防止（unbreakable）
         let block = {
           unbreakable: true,
           columns: [
@@ -309,7 +354,6 @@
 
         docContent.push(block);
 
-        // 区切り線（アイテム間）
         if (i < validItems.length - 1) {
           docContent.push({
             canvas: [{ type: 'line', x1: 0, y1: 0, x2: 525, y2: 0, lineWidth: 0.5, lineColor: '#cbd5e1' }],
