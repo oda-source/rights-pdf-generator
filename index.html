@@ -80,71 +80,94 @@
     return noExt.replace(/^([xX]?([A-Z0-9]+[-_][0-9]+[-_]|[a-z]+_[0-9]+(_[A-Z])?[-_])|BUD_|阪急交通社_|[a-z]+_)/i, "");
   }
 
-  // 画像をDataURLに変換するヘルパー
+  // 安全に画像をDataURL化する処理
   function fileToDataURL(file) {
     return new Promise((resolve) => {
+      // ブラウザで読み込めない拡張子（.eps, .aiなど）は判定してダミー文字列を返す
+      if (file.name.match(/\.(eps|ai)$/i)) {
+        resolve(null);
+        return;
+      }
       const reader = new FileReader();
       reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = () => resolve(null);
       reader.readAsDataURL(file);
     });
   }
 
   // PDF生成処理
   generateBtn.addEventListener('click', async () => {
-    const titleText = docTitleInput.value.trim() || "無題";
-    const fullTitle = "【権利確認書】" + titleText;
+    try {
+      generateBtn.disabled = true;
+      generateBtn.textContent = 'PDFを作成中...';
 
-    let docContent = [
-      { text: fullTitle, fontSize: 16, bold: true, margin: [0, 0, 0, 15] }
-    ];
+      const titleText = docTitleInput.value.trim() || "無題";
+      const fullTitle = "【権利確認書】" + titleText;
 
-    for (let i = 0; i < uploadedFiles.length; i++) {
-      const file = uploadedFiles[i];
-      const dataUrl = await fileToDataURL(file);
-      const fileName = file.name;
-      const contentText = getCleanContent(fileName);
-      const sourceText = getSource(fileName);
+      let docContent = [
+        { text: fullTitle, fontSize: 16, bold: true, margin: [0, 0, 0, 15] }
+      ];
 
-      // 1ブロック（左画像・右テキストの2列レイアウト）
-      let block = {
-        columns: [
-          { image: dataUrl, width: 160, height: 110 },
-          {
-            width: '*',
-            margin: [15, 0, 0, 0],
-            text: [
-              { text: '【画像名】\n', bold: true, fontSize: 10 },
-              { text: fileName + '\n\n', fontSize: 9 },
-              { text: '【内容】\n', bold: true, fontSize: 10 },
-              { text: contentText + '\n\n', fontSize: 9 },
-              { text: '【写真入手先】\n', bold: true, fontSize: 10 },
-              { text: sourceText, fontSize: 9 }
-            ]
-          }
-        ],
-        margin: [0, 0, 0, 10]
+      for (let i = 0; i < uploadedFiles.length; i++) {
+        const file = uploadedFiles[i];
+        const fileName = file.name;
+        const contentText = getCleanContent(fileName);
+        const sourceText = getSource(fileName);
+
+        const dataUrl = await fileToDataURL(file);
+
+        // 画像枠の設定（読み込めないファイルの場合はテキストで代替表示）
+        let imgContent = { text: '（プレビュー不可）', fontSize: 10, alignment: 'center', margin: [0, 40, 0, 0] };
+        if (dataUrl) {
+          imgContent = { image: dataUrl, width: 160, height: 110 };
+        }
+
+        // 1ブロック（左画像・右テキストの2列レイアウト）
+        let block = {
+          columns: [
+            imgContent,
+            {
+              width: '*',
+              margin: [15, 0, 0, 0],
+              text: [
+                { text: '【画像名】\n', bold: true, fontSize: 10 },
+                { text: fileName + '\n\n', fontSize: 9 },
+                { text: '【内容】\n', bold: true, fontSize: 10 },
+                { text: contentText + '\n\n', fontSize: 9 },
+                { text: '【写真入手先】\n', bold: true, fontSize: 10 },
+                { text: sourceText, fontSize: 9 }
+              ]
+            }
+          ],
+          margin: [0, 0, 0, 10]
+        };
+
+        docContent.push(block);
+
+        // 仕切り線（最後のブロック以外）
+        if (i < uploadedFiles.length - 1) {
+          docContent.push({
+            canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#ccc' }],
+            margin: [0, 5, 0, 15]
+          });
+        }
+      }
+
+      const docDefinition = {
+        content: docContent,
+        pageSize: 'A4',
+        pageMargins: [40, 40, 40, 40]
       };
 
-      docContent.push(block);
+      // PDFのダウンロード実行
+      pdfMake.createPdf(docDefinition).download(fullTitle + '.pdf');
 
-      // 仕切り線（最後のブロック以外）
-      if (i < uploadedFiles.length - 1) {
-        docContent.push({
-          canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#ccc' }],
-          margin: [0, 5, 0, 15]
-        });
-      }
+    } catch (err) {
+      alert('エラーが発生しました: ' + err.message);
+    } finally {
+      generateBtn.disabled = false;
+      generateBtn.textContent = 'PDFを作成してダウンロード';
     }
-
-    // PDF定義
-    const docDefinition = {
-      content: docContent,
-      pageSize: 'A4',
-      pageMargins: [40, 40, 40, 40]
-    };
-
-    // ダウンロード実行
-    pdfMake.createPdf(docDefinition).download(fullTitle + '.pdf');
   });
 </script>
 
