@@ -3,9 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <title>権利確認書 自動作成フォーム</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
   <style>
-    body { font-family: sans-serif; background: #f4f6f9; display: flex; justify-content: center; padding: 20px; margin: 0; }
+    body { font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif; background: #f4f6f9; display: flex; justify-content: center; padding: 20px; margin: 0; }
     .card { background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 920px; max-width: 95vw; }
     h2 { text-align: center; color: #1a1a2e; margin-top: 0; margin-bottom: 20px; font-size: 20px; }
     
@@ -19,7 +18,6 @@
     .drop-zone { border: 2px dashed #4f46e5; border-radius: 8px; padding: 30px 10px; text-align: center; background: #eeeffd; color: #4f46e5; cursor: pointer; font-size: 13px; }
     .drop-zone.hover { background: #e0e2fe; }
 
-    /* 右側：超コンパクトファイルリスト */
     .file-list-container {
       flex: 1;
       border: 1px solid #cbd5e1;
@@ -79,6 +77,23 @@
 
     button.btn-submit { width: 100%; margin-top: 15px; padding: 12px; background: #4f46e5; color: #fff; border: none; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer; }
     button.btn-submit:disabled { background: #ccc; cursor: not-allowed; }
+
+    /* PDF発行（印刷）用レイアウト設定 */
+    #printArea { display: none; }
+
+    @media print {
+      body { background: #fff; padding: 0; margin: 0; }
+      .card { display: none !important; }
+      #printArea { display: block !important; padding: 15mm; }
+      .print-title { font-size: 18pt; font-weight: bold; margin-bottom: 15mm; }
+      .print-block { display: flex; gap: 10mm; margin-bottom: 8mm; page-break-inside: avoid; }
+      .print-img-box { width: 60mm; height: 40mm; border: 1px solid #ddd; display: flex; align-items: center; justify-content: center; font-size: 9pt; color: #888; overflow: hidden; }
+      .print-img-box img { width: 100%; height: 100%; object-fit: contain; }
+      .print-text-box { flex: 1; font-size: 10pt; line-height: 1.5; }
+      .print-label { font-weight: bold; margin-top: 2mm; }
+      .print-label:first-child { margin-top: 0; }
+      .print-hr { border: none; border-top: 1px solid #ccc; margin: 6mm 0; }
+    }
   </style>
 </head>
 <body>
@@ -97,7 +112,7 @@
         <small style="color: #666; font-size: 11px;">（JPG, PNG, WEBP等に対応）</small>
       </div>
 
-      <button class="btn-submit" id="generateBtn" disabled>PDFを作成してダウンロード</button>
+      <button class="btn-submit" id="generateBtn" disabled>PDFを作成（印刷プレビュー表示）</button>
     </div>
 
     <div class="right-panel">
@@ -111,6 +126,9 @@
   </div>
 </div>
 
+<!-- 印刷用隠しエリア -->
+<div id="printArea"></div>
+
 <script>
   let fileDataList = [];
 
@@ -119,6 +137,7 @@
   const generateBtn = document.getElementById('generateBtn');
   const fileListTitle = document.getElementById('fileListTitle');
   const fileList = document.getElementById('fileList');
+  const printArea = document.getElementById('printArea');
 
   dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('hover'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
@@ -214,100 +233,55 @@
     });
   }
 
-  // 日本語文字化け回避用：Canvasによる画像化処理
-  function textToCanvasImage(text, fontSize, isBold = false) {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const fontStr = `${isBold ? 'bold ' : ''}${fontSize * 2}px "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif`;
-    ctx.font = fontStr;
-    
-    const textMetrics = ctx.measureText(text);
-    canvas.width = Math.max(textMetrics.width + 10, 10);
-    canvas.height = fontSize * 2.8;
-
-    ctx.font = fontStr;
-    ctx.fillStyle = '#000000';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, 0, canvas.height / 2);
-
-    return {
-      image: canvas.toDataURL('image/png'),
-      width: canvas.width / 2,
-      height: canvas.height / 2
-    };
-  }
-
   generateBtn.addEventListener('click', async () => {
-    try {
-      generateBtn.disabled = true;
-      generateBtn.textContent = 'PDFを作成中...';
+    generateBtn.disabled = true;
+    generateBtn.textContent = '処理中...';
 
-      const titleText = docTitleInput.value.trim() || "無題";
-      const fullTitle = "【権利確認書】" + titleText;
+    const titleText = docTitleInput.value.trim() || "無題";
+    const fullTitle = "【権利確認書】" + titleText;
 
-      let docContent = [
-        textToCanvasImage(fullTitle, 16, true)
-      ];
-      docContent[0].margin = [0, 0, 0, 15];
+    let html = `<div class="print-title">${fullTitle}</div>`;
 
-      for (let i = 0; i < fileDataList.length; i++) {
-        const item = fileDataList[i];
-        const fileName = item.name;
-        const contentText = getCleanContent(fileName);
-        const sourceText = getSource(fileName);
+    for (let i = 0; i < fileDataList.length; i++) {
+      const item = fileDataList[i];
+      const fileName = item.name;
+      const contentText = getCleanContent(fileName);
+      const sourceText = getSource(fileName);
 
-        const dataUrl = await fileToDataURL(item.file);
+      const dataUrl = await fileToDataURL(item.file);
 
-        let imgContent = { text: '（プレビュー非表示）', fontSize: 9, alignment: 'center', margin: [0, 40, 0, 0], color: '#888' };
-        if (dataUrl) {
-          imgContent = { image: dataUrl, width: 160, height: 110 };
-        }
-
-        let block = {
-          columns: [
-            imgContent,
-            {
-              width: '*',
-              margin: [15, 0, 0, 0],
-              stack: [
-                textToCanvasImage('【画像名】', 10, true),
-                textToCanvasImage(fileName, 9),
-                { text: '', margin: [0, 4] },
-                textToCanvasImage('【内容】', 10, true),
-                textToCanvasImage(contentText, 9),
-                { text: '', margin: [0, 4] },
-                textToCanvasImage('【写真入手先】', 10, true),
-                textToCanvasImage(sourceText, 9)
-              ]
-            }
-          ],
-          margin: [0, 0, 0, 10]
-        };
-
-        docContent.push(block);
-
-        if (i < fileDataList.length - 1) {
-          docContent.push({
-            canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#ccc' }],
-            margin: [0, 5, 0, 15]
-          });
-        }
+      let imgHtml = `（プレビュー非表示）`;
+      if (dataUrl) {
+        imgHtml = `<img src="${dataUrl}">`;
       }
 
-      const docDefinition = {
-        content: docContent,
-        pageSize: 'A4',
-        pageMargins: [40, 40, 40, 40]
-      };
+      html += `
+        <div class="print-block">
+          <div class="print-img-box">${imgHtml}</div>
+          <div class="print-text-box">
+            <div class="print-label">【画像名】</div>
+            <div>${fileName}</div>
+            <div class="print-label">【内容】</div>
+            <div>${contentText}</div>
+            <div class="print-label">【写真入手先】</div>
+            <div>${sourceText}</div>
+          </div>
+        </div>
+      `;
 
-      pdfMake.createPdf(docDefinition).download(fullTitle + '.pdf');
-
-    } catch (err) {
-      alert('PDF作成中にエラーが発生しました: ' + err.message);
-    } finally {
-      generateBtn.disabled = false;
-      generateBtn.textContent = 'PDFを作成してダウンロード';
+      if (i < fileDataList.length - 1) {
+        html += `<hr class="print-hr">`;
+      }
     }
+
+    printArea.innerHTML = html;
+
+    // 印刷ダイアログの呼出（送信先を「PDFに保存」にすることで超綺麗にPDF化）
+    document.title = fullTitle;
+    window.print();
+
+    generateBtn.disabled = false;
+    generateBtn.textContent = 'PDFを作成（印刷プレビュー表示）';
   });
 </script>
 
