@@ -214,19 +214,18 @@
     });
   }
 
-  // 文字化け防止 ＆ 細字フォント化（Regular指定）
-  function drawTextToImage(text, fontSize = 11, isBold = false) {
+  // 小さめの細字フォント描画（InDesign仕様）
+  function drawTextToImage(text, fontSize = 8, isBold = false) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    const scale = 2;
+    const scale = 2; // 高精細描画
     
-    // isBold を false（細字）にして通常ウェイトで統一
-    const font = `${isBold ? '600 ' : 'normal '}${fontSize * scale}px "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif`;
+    const font = `${isBold ? '500 ' : 'normal '}${fontSize * scale}px "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif`;
     ctx.font = font;
 
     const metrics = ctx.measureText(text);
-    canvas.width = Math.ceil(metrics.width) + 10;
-    canvas.height = Math.ceil(fontSize * 1.4 * scale);
+    canvas.width = Math.ceil(metrics.width) + 8;
+    canvas.height = Math.ceil(fontSize * 1.35 * scale);
 
     ctx.font = font;
     ctx.fillStyle = '#1e293b';
@@ -248,9 +247,9 @@
       const titleText = docTitleInput.value.trim() || "無題";
       const fullTitle = "【権利確認書】" + titleText;
 
-      const titleImg = drawTextToImage(fullTitle, 15, true);
+      const titleImg = drawTextToImage(fullTitle, 13, true);
       let docContent = [
-        { image: titleImg.image, width: titleImg.width, height: titleImg.height, margin: [0, 0, 0, 10] }
+        { image: titleImg.image, width: titleImg.width, height: titleImg.height, margin: [0, 0, 0, 12] }
       ];
 
       let validItems = [];
@@ -279,45 +278,42 @@
         const contentText = getCleanContent(fileName);
         const sourceText = getSource(fileName);
 
-        // 細字化したテキスト画像を生成
-        const labelName = drawTextToImage('【画像名】', 9.5, true);
-        const valName = drawTextToImage(fileName, 8.5);
-        const labelContent = drawTextToImage('【内容】', 9.5, true);
-        const valContent = drawTextToImage(contentText, 8.5);
-        const labelSource = drawTextToImage('【写真入手先】', 9.5, true);
-        const valSource = drawTextToImage(sourceText, 8.5);
+        // 小さめの文字サイズ（InDesignに寄せる）
+        const labelName = drawTextToImage('【画像名】', 8, true);
+        const valName = drawTextToImage(fileName, 7.5);
+        const labelContent = drawTextToImage('【内容】', 8, true);
+        const valContent = drawTextToImage(contentText, 7.5);
+        const labelSource = drawTextToImage('【写真入手先】', 8, true);
+        const valSource = drawTextToImage(sourceText, 7.5);
 
+        // サムネイルを大きく（横170px = 60mm、縦113px = 40mm）＆ 項目単位での分解防止（unbreakable）
         let block = {
+          unbreakable: true,
           columns: [
-            { image: item.dataUrl, width: 140, height: 95 },
+            { image: item.dataUrl, width: 170, height: 113 },
             {
               width: '*',
               margin: [12, 0, 0, 0],
               stack: [
                 { image: labelName.image, width: labelName.width, height: labelName.height, margin: [0, 0, 0, 1] },
-                { image: valName.image, width: valName.width, height: valName.height, margin: [0, 0, 0, 5] },
+                { image: valName.image, width: valName.width, height: valName.height, margin: [0, 0, 0, 4] },
                 { image: labelContent.image, width: labelContent.width, height: labelContent.height, margin: [0, 0, 0, 1] },
-                { image: valContent.image, width: valContent.width, height: valContent.height, margin: [0, 0, 0, 5] },
+                { image: valContent.image, width: valContent.width, height: valContent.height, margin: [0, 0, 0, 4] },
                 { image: labelSource.image, width: labelSource.width, height: labelSource.height, margin: [0, 0, 0, 1] },
                 { image: valSource.image, width: valSource.width, height: valSource.height }
               ]
             }
           ],
-          margin: [0, 0, 0, 6]
+          margin: [0, 0, 0, 5]
         };
-
-        // 1ページあたり5枚（5項目）ごとに改ページを入れる制御
-        if (i > 0 && i % 5 === 0) {
-          block.pageBreak = 'before';
-        }
 
         docContent.push(block);
 
-        // ブロック間の区切り線（ページの最後のアイテム以外）
-        if (i < validItems.length - 1 && (i + 1) % 5 !== 0) {
+        // 区切り線（アイテム間）
+        if (i < validItems.length - 1) {
           docContent.push({
-            canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#e2e8f0' }],
-            margin: [0, 3, 0, 8]
+            canvas: [{ type: 'line', x1: 0, y1: 0, x2: 525, y2: 0, lineWidth: 0.5, lineColor: '#cbd5e1' }],
+            margin: [0, 4, 0, 6]
           });
         }
       }
