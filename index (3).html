@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <style>
+      /* ポップアップ内を綺麗にするためのデザイン */
+      body { font-family: sans-serif; color: #172b4d; margin: 0; padding: 12px; background-color: #fff; }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 5px; }
+      th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+      th { background-color: #f4f5f7; color: #172b4d; font-weight: 600; }
+      tr:nth-child(even) { background-color: #f9f9f9; }
+      p { font-size: 13px; color: #6b778c; margin: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="popup-content"></div>
+
+    <script>
+      // ミリ秒を「XdXhXm」の文字列に変換する関数
+      function formatDuration(ms) {
+        var totalMinutes = Math.floor(ms / (1000 * 60));
+        var d = Math.floor(totalMinutes / (60 * 24));
+        var h = Math.floor((totalMinutes % (60 * 24)) / 60);
+        var m = totalMinutes % 60;
+
+        var result = '';
+        if (d > 0) result += d + 'd';
+        if (h > 0 || d > 0) result += h + 'h'; 
+        result += m + 'm'; 
+
+        return result;
+      }
+
+      // 滞在履歴を更新・計算する共通関数
+      function updateAndGetHistory(t) {
+        return Promise.all([
+          t.card('dateLastActivity'),
+          t.list('name'),
+          t.get('card', 'shared', 'listHistory', [])
+        ])
+        .then(function(data) {
+          var card = data[0];
+          var list = data[1];
+          var history = data[2];
+          var now = new Date().getTime();
+
+          if (!list || !list.name) return history;
+          if (list.name.indexOf('共有事項') !== -1) return history;
+
+          if (history.length > 0) {
+            var lastEntry = history[history.length - 1];
+            if (lastEntry.listName === list.name) {
+              lastEntry.duration = formatDuration(now - lastEntry.enteredAt);
+            } else {
+              lastEntry.duration = formatDuration(now - lastEntry.enteredAt);
+              history.push({ listName: list.name, enteredAt: now, duration: '0m' });
+            }
+          } else {
+            history.push({ listName: list.name, enteredAt: now, duration: '0m' });
+          }
+
+          return t.set('card', 'shared', 'listHistory', history).then(function() { return history; });
+        });
+      }
+
+      TrelloPowerUp.initialize({
+        // ① リスト上のピンクの数字バッジ（そのまま維持）
+        'card-badges': function(t, options) {
+          return t.list('name').then(function(list) {
+            if (list && list.name && list.name.indexOf('共有事項') !== -1) return [];
+            
+            updateAndGetHistory(t);
+
+            return t.card('dateLastActivity').then(function(card) {
+              var lastActivity = new Date(card.dateLastActivity);
+              var now = new Date();
+              var diffMs = now - lastActivity;
+              
+              return [{
+                text: formatDuration(diffMs), 
+                color: 'pink',
+                refresh: 60 
+              }];
+            });
+          });
+        },
+
+        // ② カード内のボタン（そのまま維持）
+        'card-buttons': function(t, options) {
+          return [{
+            icon: 'https://oda-source.github.io/trello-time/icon.png',
+            text: '滞在履歴を見る',
+            callback: function(t) {
+              return t.popup({
+                title: 'このカードの移動履歴',
+                url: './index.html?view=popup',
+                height: 250
+              });
+            }
+          }];
+        },
+
+        // ✨ ③ ボード右上の全体ボタンを追加（これを足すことでボタンが出現します）
+        'board-buttons': function(t, options) {
+          return [{
+            icon: 'https://oda-source.github.io/trello-time/icon.png',
+            text: '⏰全体の滞在タイムライン',
+            callback: function(t) {
+              return t.modal({
+                title: '📊 ボード全体の工程別・滞在タイムライン集計',
+                url: './timeline.html?view=board',
+                fullscreen: true
+              });
+            }
+          }];
+        }
+      });
+
+      // ④ ポップアップ画面の処理（カード内ボタン用）
+      var urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('view') === 'popup') {
+        var t = TrelloPowerUp.iframe();
+        updateAndGetHistory(t).then(function(history) {
+          var container = document.getElementById('popup-content');
+          
+          if (!history || history.length === 0) {
+            container.innerHTML = '<p>まだ移動履歴がありません。カードを他のリストに動かすと記録が始まります。</p>';
+            return;
+          }
+
+          var html = '<table><tr><th>通過したリスト</th><th>滞在時間</th></tr>';
+          for (var i = 0; i < history.length; i++) {
+            html += '<tr><td>' + history[i].listName + '</td><td><b>' + history[i].duration + '</b></td></tr>';
+          }
+          html += '</table>';
+          
+          container.innerHTML = html;
+        });
+      }
+    </script>
+  </body>
+</html>
