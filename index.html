@@ -353,7 +353,12 @@
         let block = {
           unbreakable: true,
           columns: [
-            { image: item.dataUrl, width: 170, height: 113 },
+            {
+              // アスペクト比を完全保護して 170x113 枠内に自動自動収まり
+              image: item.dataUrl,
+              fit: [170, 113],
+              alignment: 'center'
+            },
             {
               width: '*',
               margin: [12, 0, 0, 0],
@@ -405,7 +410,7 @@
       'board-buttons': function (t, opts) {
         return [{
           icon: 'https://api.iconify.design/ion:document-text-outline.svg?color=%234f46e5',
-          text: '権利確認書PDF作成',
+          text: '権利確認書',
           callback: function (t) {
             return t.modal({
               title: '権利確認書 作成フォーム',
