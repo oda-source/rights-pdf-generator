@@ -153,7 +153,6 @@
   const fileListTitle = document.getElementById('fileListTitle');
   const fileList = document.getElementById('fileList');
 
-  // 非対応ファイルの判定 (.eps, .ai, .pdf, .psd 等)
   function isUnsupportedFile(filename) {
     return !!filename.match(/\.(eps|ai|pdf|psd)$/i);
   }
@@ -295,6 +294,36 @@
     });
   }
 
+  // ★ 日本語文字化けゼロ ＆ 上下縦ズレ完全補正キャンバスレンダラー
+  function drawTextToImage(text, fontSize = 8, isBold = false) {
+    const scale = 3; // 高精細描画（レティナ対応）
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    const font = `${isBold ? '600 ' : 'normal '}${fontSize * scale}px "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif`;
+    ctx.font = font;
+
+    const metrics = ctx.measureText(text);
+    const textWidth = Math.ceil(metrics.width) + (4 * scale);
+    const textHeight = Math.ceil(fontSize * 1.3 * scale);
+
+    canvas.width = textWidth;
+    canvas.height = textHeight;
+
+    ctx.font = font;
+    ctx.fillStyle = '#1e293b';
+    ctx.textBaseline = 'alphabetic'; // ベースライン固定でズレを完全排除
+
+    // 適切なy座標位置に描画
+    ctx.fillText(text, 2 * scale, Math.round(fontSize * 1.0 * scale));
+
+    return {
+      image: canvas.toDataURL('image/png'),
+      width: canvas.width / scale,
+      height: canvas.height / scale
+    };
+  }
+
   generateBtn.addEventListener('click', async () => {
     try {
       generateBtn.disabled = true;
@@ -314,9 +343,9 @@
       const titleText = docTitleInput.value.trim() || "無題";
       const fullTitle = "【権利確認書】" + titleText;
 
-      // pdfmake標準テキスト描画（文字ズレ完全防止）
+      const titleImg = drawTextToImage(fullTitle, 13, true);
       let docContent = [
-        { text: fullTitle, fontSize: 13, bold: true, color: '#1e293b', margin: [0, 0, 0, 12] }
+        { image: titleImg.image, width: titleImg.width, height: titleImg.height, margin: [0, 0, 0, 12] }
       ];
 
       let validItems = [];
@@ -345,7 +374,14 @@
         const contentText = getCleanContent(fileName);
         const sourceText = getSource(fileName);
 
-        // pdfmake標準のレイアウト構造
+        // 文字化けのない高精細Canvasテキスト出力
+        const labelName = drawTextToImage('【画像名】', 8, true);
+        const valName = drawTextToImage(fileName, 7.5);
+        const labelContent = drawTextToImage('【内容】', 8, true);
+        const valContent = drawTextToImage(contentText, 7.5);
+        const labelSource = drawTextToImage('【写真入手先】', 8, true);
+        const valSource = drawTextToImage(sourceText, 7.5);
+
         let block = {
           unbreakable: true,
           margin: [0, 0, 0, 6],
@@ -362,16 +398,16 @@
               ]
             },
             {
-              // 右列：テキストエリア（標準テキスト出力でガタつき解消）
+              // 右列：テキストエリア（ズレ補正Canvasで文字化けゼロ）
               width: '*',
               margin: [15, 0, 0, 0],
               stack: [
-                { text: '【画像名】', fontSize: 8, bold: true, color: '#1e293b', margin: [0, 0, 0, 1] },
-                { text: fileName, fontSize: 7.5, color: '#1e293b', margin: [0, 0, 0, 4] },
-                { text: '【内容】', fontSize: 8, bold: true, color: '#1e293b', margin: [0, 0, 0, 1] },
-                { text: contentText, fontSize: 7.5, color: '#1e293b', margin: [0, 0, 0, 4] },
-                { text: '【写真入手先】', fontSize: 8, bold: true, color: '#1e293b', margin: [0, 0, 0, 1] },
-                { text: sourceText, fontSize: 7.5, color: '#1e293b' }
+                { image: labelName.image, width: labelName.width, height: labelName.height, margin: [0, 0, 0, 1] },
+                { image: valName.image, width: valName.width, height: valName.height, margin: [0, 0, 0, 4] },
+                { image: labelContent.image, width: labelContent.width, height: labelContent.height, margin: [0, 0, 0, 1] },
+                { image: valContent.image, width: valContent.width, height: valContent.height, margin: [0, 0, 0, 4] },
+                { image: labelSource.image, width: labelSource.width, height: labelSource.height, margin: [0, 0, 0, 1] },
+                { image: valSource.image, width: valSource.width, height: valSource.height }
               ]
             }
           ]
