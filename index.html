@@ -294,28 +294,23 @@
     });
   }
 
-  // ★ 日本語文字化けゼロ ＆ 上下縦ズレ完全補正キャンバスレンダラー
+  // ★ うまくいっていた状態の元のテキスト描画処理（フォント崩れ・文字化け一切なし）
   function drawTextToImage(text, fontSize = 8, isBold = false) {
-    const scale = 3; // 高精細描画（レティナ対応）
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
+    const scale = 2;
     
-    const font = `${isBold ? '600 ' : 'normal '}${fontSize * scale}px "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif`;
+    const font = `${isBold ? '500 ' : 'normal '}${fontSize * scale}px "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif`;
     ctx.font = font;
 
     const metrics = ctx.measureText(text);
-    const textWidth = Math.ceil(metrics.width) + (4 * scale);
-    const textHeight = Math.ceil(fontSize * 1.3 * scale);
-
-    canvas.width = textWidth;
-    canvas.height = textHeight;
+    canvas.width = Math.ceil(metrics.width) + 8;
+    canvas.height = Math.ceil(fontSize * 1.35 * scale);
 
     ctx.font = font;
     ctx.fillStyle = '#1e293b';
-    ctx.textBaseline = 'alphabetic'; // ベースライン固定でズレを完全排除
-
-    // 適切なy座標位置に描画
-    ctx.fillText(text, 2 * scale, Math.round(fontSize * 1.0 * scale));
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 0, canvas.height / 2);
 
     return {
       image: canvas.toDataURL('image/png'),
@@ -374,7 +369,6 @@
         const contentText = getCleanContent(fileName);
         const sourceText = getSource(fileName);
 
-        // 文字化けのない高精細Canvasテキスト出力
         const labelName = drawTextToImage('【画像名】', 8, true);
         const valName = drawTextToImage(fileName, 7.5);
         const labelContent = drawTextToImage('【内容】', 8, true);
@@ -398,7 +392,7 @@
               ]
             },
             {
-              // 右列：テキストエリア（ズレ補正Canvasで文字化けゼロ）
+              // 右列：元の正常なテキストエリア構成
               width: '*',
               margin: [15, 0, 0, 0],
               stack: [
