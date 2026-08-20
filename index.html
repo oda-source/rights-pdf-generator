@@ -255,7 +255,7 @@
     return noExt.replace(/^([xX]?([A-Z0-9]+[-_][0-9]+[-_]|[a-z]+_[0-9]+(_[A-Z])?[-_])|BUD_|阪急交通社_|[a-z]+_)/i, "");
   }
 
-  // ★ PDF容量軽量化機能：画像を長辺1200px・JPEG画質80%に自動圧縮
+  // 画像自動圧縮機能（PDF容量を5MB以内に抑制）
   function fileToCompressedDataURL(file, maxDimension = 1200, quality = 0.8) {
     return new Promise((resolve) => {
       if (isUnsupportedFile(file.name) || !file.type.startsWith('image/')) {
@@ -285,7 +285,6 @@
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
 
-          // 圧縮済みJPEG DataURLを出力
           resolve(canvas.toDataURL('image/jpeg', quality));
         };
         img.onerror = () => resolve(null);
@@ -294,31 +293,6 @@
       reader.onerror = () => resolve(null);
       reader.readAsDataURL(file);
     });
-  }
-
-  // 細字フォント描画（InDesign仕様）
-  function drawTextToImage(text, fontSize = 8, isBold = false) {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const scale = 2;
-    
-    const font = `${isBold ? '500 ' : 'normal '}${fontSize * scale}px "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif`;
-    ctx.font = font;
-
-    const metrics = ctx.measureText(text);
-    canvas.width = Math.ceil(metrics.width) + 8;
-    canvas.height = Math.ceil(fontSize * 1.35 * scale);
-
-    ctx.font = font;
-    ctx.fillStyle = '#1e293b';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, 0, canvas.height / 2);
-
-    return {
-      image: canvas.toDataURL('image/png'),
-      width: canvas.width / scale,
-      height: canvas.height / scale
-    };
   }
 
   generateBtn.addEventListener('click', async () => {
@@ -340,9 +314,9 @@
       const titleText = docTitleInput.value.trim() || "無題";
       const fullTitle = "【権利確認書】" + titleText;
 
-      const titleImg = drawTextToImage(fullTitle, 13, true);
+      // pdfmake標準テキスト描画（文字ズレ完全防止）
       let docContent = [
-        { image: titleImg.image, width: titleImg.width, height: titleImg.height, margin: [0, 0, 0, 12] }
+        { text: fullTitle, fontSize: 13, bold: true, color: '#1e293b', margin: [0, 0, 0, 12] }
       ];
 
       let validItems = [];
@@ -351,7 +325,6 @@
         if (isUnsupportedFile(item.file.name)) {
           continue;
         }
-        // 画像を軽量化して取得
         const dataUrl = await fileToCompressedDataURL(item.file);
         if (dataUrl) {
           validItems.push({
@@ -372,36 +345,36 @@
         const contentText = getCleanContent(fileName);
         const sourceText = getSource(fileName);
 
-        const labelName = drawTextToImage('【画像名】', 8, true);
-        const valName = drawTextToImage(fileName, 7.5);
-        const labelContent = drawTextToImage('【内容】', 8, true);
-        const valContent = drawTextToImage(contentText, 7.5);
-        const labelSource = drawTextToImage('【写真入手先】', 8, true);
-        const valSource = drawTextToImage(sourceText, 7.5);
-
+        // pdfmake標準のレイアウト構造
         let block = {
           unbreakable: true,
+          margin: [0, 0, 0, 6],
           columns: [
             {
-              // 比率保持 ＆ 枠内（170x113）自動収まり
-              image: item.dataUrl,
-              fit: [170, 113],
-              alignment: 'center'
+              // 左列：170px幅の画像エリア（中央配置・比率保護）
+              width: 170,
+              stack: [
+                {
+                  image: item.dataUrl,
+                  fit: [170, 113],
+                  alignment: 'center'
+                }
+              ]
             },
             {
+              // 右列：テキストエリア（標準テキスト出力でガタつき解消）
               width: '*',
-              margin: [12, 0, 0, 0],
+              margin: [15, 0, 0, 0],
               stack: [
-                { image: labelName.image, width: labelName.width, height: labelName.height, margin: [0, 0, 0, 1] },
-                { image: valName.image, width: valName.width, height: valName.height, margin: [0, 0, 0, 4] },
-                { image: labelContent.image, width: labelContent.width, height: labelContent.height, margin: [0, 0, 0, 1] },
-                { image: valContent.image, width: valContent.width, height: valContent.height, margin: [0, 0, 0, 4] },
-                { image: labelSource.image, width: labelSource.width, height: labelSource.height, margin: [0, 0, 0, 1] },
-                { image: valSource.image, width: valSource.width, height: valSource.height }
+                { text: '【画像名】', fontSize: 8, bold: true, color: '#1e293b', margin: [0, 0, 0, 1] },
+                { text: fileName, fontSize: 7.5, color: '#1e293b', margin: [0, 0, 0, 4] },
+                { text: '【内容】', fontSize: 8, bold: true, color: '#1e293b', margin: [0, 0, 0, 1] },
+                { text: contentText, fontSize: 7.5, color: '#1e293b', margin: [0, 0, 0, 4] },
+                { text: '【写真入手先】', fontSize: 8, bold: true, color: '#1e293b', margin: [0, 0, 0, 1] },
+                { text: sourceText, fontSize: 7.5, color: '#1e293b' }
               ]
             }
-          ],
-          margin: [0, 0, 0, 5]
+          ]
         };
 
         docContent.push(block);
